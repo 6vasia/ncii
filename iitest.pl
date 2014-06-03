@@ -1,7 +1,7 @@
 use strict;
 use utf8;
 
-use II;
+use II::Point;
 
 use Data::Dumper;
 
