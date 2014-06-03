@@ -9,14 +9,15 @@ use MIME::Base64;
 
 use Data::Dumper;
 
-sub new
+sub new ($$$)
 {
-    my ($class, $nodeurl, $cachedir) = @_;
+    my ($class, $nodeurl, $authstr) = @_;
     my $ua = LWP::UserAgent->new;
     $ua->env_proxy;
 
     my $self = {};
     $self->{nodeurl} = $nodeurl;
+    $self->{authstr} = $authstr;
     $self->{ua} = $ua;
     $self->{errors} = [];
     
@@ -70,6 +71,29 @@ sub fetch_msgs
         push @{$self->{errors}}, $resp->status_line;
     }
     return @res;
+}
+
+sub post
+{
+    my ($self, @msgs) = @_;
+    my $ua = $self->{ua};
+    for my $msg (@msgs) {
+        my $rawmsg = encode_base64(join ("\n", 
+            $msg->{echoarea},
+            $msg->{to},
+            $msg->{subj},
+            '', 
+            $msg->{content}
+        ));
+        my $resp = $ua->request(POST ($self->{nodeurl}.'u/point', [tmsg => $rawmsg, pauth => $self->{authstr}]));
+        unless ($resp->is_success) {
+            push @{$self->{errors}}, $resp->status_line;
+        }
+        unless ($resp->decoded_content =~ /msg ok/) {
+            push @{$self->{errors}}, $resp->decoded_content;
+        }
+    }
+    return;
 }
 
 1;
