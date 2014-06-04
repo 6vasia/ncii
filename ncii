@@ -1,0 +1,171 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use utf8;
+
+use Curses;
+use Curses::UI;
+use YAML;
+use II::Point;
+use II::Misc qw(logger logger_facility);
+use Env qw/HOME/;
+
+use Data::Dumper;
+
+my $cui;
+my $cfg = {};
+my $ii;
+my $echoes = {};
+my $messages = {};
+
+sub config
+{
+    my $cfgpath = $HOME ? $HOME . '/.config/ncii' : '';
+    $cfg = YAML::LoadFile ($cfgpath.'/ncii.yaml') if -e $cfgpath.'/ncii.yaml';
+}
+
+sub load_echo ($)
+{
+    local $_;
+    my $list = shift;
+    my $echo = $list->title;
+    my @errors = ();
+    
+    logger ("info", "Loading %s", $echo);
+    
+    unless (defined $ii){
+        my $authstr = 'guest';
+        $authstr = $cfg->{authstr} if (defined $cfg->{authstr} and $cfg->{authstr});
+        $ii = II::Point->new ($cfg->{node}, $authstr);
+    }
+    unless (defined $echoes->{$echo}) {
+        logger ("info", "Fetching %s", $echo);
+        $cui->status ("Loading $echo...");
+        
+        my %msgs = $ii->fetch_echoes($echo);
+        @errors = $ii->pop_errors;
+        if (scalar @errors){
+            logger ("warn", "Error fetching %s: %s", $echo, $_) for (@errors);
+            $cui->error("There were errors fetching $echo. See log for details.");
+        }
+        $echoes->{$echo} = $msgs{$echo};
+        logger ("info", "Fetched %s: %d", $echo, scalar @{$msgs{$echo}});
+        
+        $cui->nostatus;
+    }
+    
+    my @fetchlist = ();
+    for my $m (@{$echoes->{$echo}}) {
+        push @fetchlist, $m unless defined $messages->{$m};
+    }
+    if (scalar @fetchlist) {
+        logger ("info", "fetching %d messages", scalar @fetchlist);
+        $cui->status ("Loading messages for $echo");
+
+        my %fetched = $ii->fetch_msgs(@fetchlist);
+        @errors = $ii->pop_errors;
+        if (scalar @errors) {
+            logger ("warn", "Error fetching: %s", $_) for (@errors);
+            $cui->error ("Error fetching messages. See log for detail.");
+        }
+        for my $msg (keys %fetched){
+            $messages->{$msg} = $fetched{$msg};
+        }
+        $cui->nostatus;
+    }
+    $list->values ([ reverse @{$echoes->{$echo}} ]);
+    $list->labels ({ map { $_ => $messages->{$_}{subj}} @{$echoes->{$echo}} });
+}
+
+sub ui
+{
+    my $echowidth = defined $cfg->{ui}{echolist_width} ? $cfg->{ui}{echolist_width} : 16;
+    $cui = new Curses::UI ( 
+        -clear_on_exit => 1, 
+        -mouse_support => 1,
+        -color_support => 1,
+        -debug => 0,
+        -utf8 => 1,
+    );
+    my $mainwin = $cui->add (
+        'mainwin', 'Window',
+        -border => 0,
+    );
+    my $echowin = $mainwin->add (
+        'echowin', 'Window',
+        -border => 1,
+        -width => $echowidth
+    );
+    my $echolist = $echowin->add (
+        'echolist', 'Listbox',
+        -border => 0,
+        -values => $cfg->{echoes},
+    );
+    my $msgwin = $mainwin->add (
+        'msgwin', 'Window', 
+        -border => 0,
+        -x => $echowidth,
+    );
+    my $msglist = $msgwin->add (
+        'msglist', 'Listbox',
+        -border => 1,
+        -height => $msgwin->{-sh}/2,
+        -vscrollbar => 'right',
+    );
+    my $preview = $msgwin->add (
+        'prewiew', 'TextViewer', 
+        -border => 1,
+        -wrapping => 1,
+        -y => int($msgwin->{-sh}/2),
+#        -height => $msgwin->{-sh} - int($msgwin->{-sh}/2)
+    );
+    $cui->set_binding( sub {$cui->mainloopExit;} , "\cQ");
+    $cui->set_binding( sub {
+            $echowin->{-width} += 1;
+            $echowin->layout;
+            $msgwin->{-x} += 1;
+            $msgwin->layout;
+            $mainwin->draw;
+        } , "\c]");
+    $cui->set_binding( sub {
+            $echowin->{-width} -= 1;
+            $echowin->layout;
+            $msgwin->{-x} -= 1;
+            $msgwin->layout;
+            $mainwin->draw;
+        } , "\c[");
+    $cui->set_binding(sub {
+            $echolist->option_next;
+            $echolist->option_select;
+            $echolist->draw},
+        "\cN");
+    $cui->set_binding(sub {
+            $echolist->option_prev;
+            $echolist->option_select;
+            $echolist->draw},
+        "\cP");
+    
+    $echolist->onChange(sub {
+            $msglist->title($echolist->get_active_value());
+            load_echo($msglist);
+            $msglist->draw;
+        });
+    $msglist->onSelectionChange(sub {
+            $msglist->option_select;
+            $preview->text($messages->{$msglist->get_active_value()}{content});
+        });
+    $echolist->set_selection(0);
+    $msgwin->focus;
+}
+
+logger_facility "ncii";
+logger ("info", "=== Starting at %s ===", scalar localtime);
+config;
+
+if (not defined $cfg->{node}) {
+    die "Config me first!";
+}
+
+ui;
+$cui->mainloop;

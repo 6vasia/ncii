@@ -5,7 +5,7 @@ use II::Point;
 
 use Data::Dumper;
 
-my $ii = II->new ("http://51t.ru/");
+my $ii = II::Point->new ("http://51t.ru/");
 my %echoes = $ii->fetch_echoes('im.1406');
 print Dumper (\%echoes);
 
