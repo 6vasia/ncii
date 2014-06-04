@@ -25,12 +25,29 @@ sub config
     $cfg = YAML::LoadFile ($cfgpath.'/ncii.yaml') if -e $cfgpath.'/ncii.yaml';
 }
 
+sub msg_title ($$)
+{
+    my ($m, $width) = @_;
+    my @lt = localtime($m->{date});
+    my $ts = sprintf(" %02d:%02d %02d.%02d.%04d",
+            $lt[2], $lt[1], $lt[3], $lt[4], $lt[5]+1900
+        );
+    my $title = sprintf ("%4d: %s (%s -> %s)",
+        $m->{no}, $m->{subj}, $m->{from}, $m->{to});
+    if (length($title) > $width - length($ts)) {
+        return substr ($title, 0, $width - length($ts)).$ts;
+    } else {
+        return $title." "x($width - length($ts) - length($title)).$ts;
+    }
+}
+
 sub load_echo ($)
 {
     local $_;
     my $list = shift;
     my $echo = $list->title;
     my @errors = ();
+    my $strwidth = $list->canvaswidth;
     
     logger ("info", "Loading %s", $echo);
     
@@ -74,8 +91,14 @@ sub load_echo ($)
         }
         $cui->nostatus;
     }
+    $cui->leave_curses;
+    my $no = 1;
+    for my $m (@{$echoes->{$echo}}){
+        $messages->{$m}{no} = $no++;
+    }
     $list->values ([ reverse @{$echoes->{$echo}} ]);
-    $list->labels ({ map { $_ => $messages->{$_}{subj}} @{$echoes->{$echo}} });
+    $list->labels ({ map { $_ => msg_title ($messages->{$_}, $strwidth) } @{$echoes->{$echo}} });
+    $cui->reset_curses;
 }
 
 sub ui
@@ -110,15 +133,14 @@ sub ui
     my $msglist = $msgwin->add (
         'msglist', 'Listbox',
         -border => 1,
-        -height => $msgwin->{-sh}/2,
+        -height => $msgwin->canvasheight()/2,
         -vscrollbar => 'right',
     );
     my $preview = $msgwin->add (
         'prewiew', 'TextViewer', 
         -border => 1,
         -wrapping => 1,
-        -y => int($msgwin->{-sh}/2),
-#        -height => $msgwin->{-sh} - int($msgwin->{-sh}/2)
+        -y => int($msgwin->canvasheight()/2),
     );
     $cui->set_binding( sub {$cui->mainloopExit;} , "\cQ");
     $cui->set_binding( sub {

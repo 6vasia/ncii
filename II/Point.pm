@@ -6,6 +6,7 @@ use utf8;
 use LWP::UserAgent;
 use HTTP::Request::Common;
 use MIME::Base64;
+use Encode;
 
 use II::Misc qw(logger);
 use Data::Dumper;
@@ -71,8 +72,8 @@ sub fetch_msgs
                             from => $msgcontent[3],
                             addr => $msgcontent[4],
                             to => $msgcontent[5],
-                            subj => $msgcontent[6],
-                            content => join ("\n", @msgcontent[8..@msgcontent])
+                            subj => decode_utf8($msgcontent[6]),
+                            content => decode_utf8(join ("\n", @msgcontent[8..@msgcontent]))
                         });
                 }
             }
