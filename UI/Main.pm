@@ -33,21 +33,21 @@ sub new
     );
     my $msgwin = $mainwin->add (
         'msgwin', 'Window', 
-        -border => 1,
-        -x => $self->{echolist_w},
-        -height => $mainwin->{-sh}/2
-    );
-    $msgwin->add (
-        'msglist', 'Listbox',
         -border => 0,
+        -x => $self->{echolist_w},
+    );
+    my $msglist = $msgwin->add (
+        'msglist', 'Listbox',
+        -border => 1,
+        -height => $msgwin->{-sh}/2,
         -vscrollbar => 'right',
         -values => [(0..100)]
     );
-    my $prewin = $mainwin->add (
-        'prewin', 'Window', 
+    my $preview = $msgwin->add (
+        'prewiew', 'TextViewer', 
         -border => 1,
-        -x => $self->{echolist_w},
-        -y => $mainwin->{-sh}/2
+        -y => int($msgwin->{-sh}/2),
+#        -height => $msgwin->{-sh} - int($msgwin->{-sh}/2)
     );
     $cui->set_binding( sub {$cui->mainloopExit;} , "\cQ");
     $cui->set_binding( sub {
@@ -66,7 +66,7 @@ sub new
         } , "\c[");
     $cui->set_binding(sub {$echolist->option_next; $echolist->option_select; $echolist->draw} ,KEY_NPAGE());
     $cui->set_binding(sub {$echolist->option_prev; $echolist->option_select; $echolist->draw} ,KEY_PPAGE());
-    $echolist->onChange(sub {$msgwin->title($echolist->get_active_value()); $msgwin->draw;});
+    $echolist->onChange(sub {$msglist->title($echolist->get_active_value()); $msglist->draw;});
     
     $echolist->set_selection(0);
     $msgwin->focus;
