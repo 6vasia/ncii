@@ -3,7 +3,7 @@ package UI::Main;
 use strict;
 use utf8;
 
-use II;
+use Curses;
 use Curses::UI;
 
 sub new
@@ -26,17 +26,29 @@ sub new
         -border => 1,
         -width => $self->{echolist_w}
     );
-    $echowin->add (
+    my $echolist = $echowin->add (
         'echolist', 'Listbox',
         -border => 0,
-        -values => ['im.1406', 'ii.dev.14'],
+        -values => ['im.1406', 'ii.dev.14', 'ii.test.14'],
     );
-    my $msgswin = $mainwin->add (
+    my $msgwin = $mainwin->add (
         'msgwin', 'Window', 
         -border => 1,
-        -x => $self->{echolist_w}
+        -x => $self->{echolist_w},
+        -height => $mainwin->{-sh}/2
     );
-    
+    $msgwin->add (
+        'msglist', 'Listbox',
+        -border => 0,
+        -vscrollbar => 'right',
+        -values => [(0..100)]
+    );
+    my $prewin = $mainwin->add (
+        'prewin', 'Window', 
+        -border => 1,
+        -x => $self->{echolist_w},
+        -y => $mainwin->{-sh}/2
+    );
     $cui->set_binding( sub {$cui->mainloopExit;} , "\cQ");
     $cui->set_binding( sub {
             $echowin->{-width} += 1;
@@ -52,7 +64,12 @@ sub new
             $msgwin->layout;
             $mainwin->draw;
         } , "\c[");
+    $cui->set_binding(sub {$echolist->option_next; $echolist->option_select; $echolist->draw} ,KEY_NPAGE());
+    $cui->set_binding(sub {$echolist->option_prev; $echolist->option_select; $echolist->draw} ,KEY_PPAGE());
+    $echolist->onChange(sub {$msgwin->title($echolist->get_active_value()); $msgwin->draw;});
     
+    $echolist->set_selection(0);
+    $msgwin->focus;
     $self->{cui} = $cui;
     
     return bless $self;
