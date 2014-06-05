@@ -16,7 +16,7 @@ sub new ($$$)
     my ($class, $nodeurl, $authstr) = @_;
     
     logger ("debug", "new Point (%s, %s)", $nodeurl, $authstr);
-    my $ua = LWP::UserAgent->new;
+    my $ua = LWP::UserAgent->new (agent => 'ELinks (0.4pre5; Linux 2.4.27 i686; 80x25)');
     $ua->env_proxy;
 
     my $self = {};
