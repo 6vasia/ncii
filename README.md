@@ -7,8 +7,8 @@ Requires: libwww-perl, MIME::Base64, Curses::UI, YAML.
 
 ## Keybindings:
 
-- C-n: next echo
-- C-p: prev echo
+- C-n: next subscription
+- C-p: prev subscription
 - C-q: quit
 - C-[: decrease echo list width
 - C-]: increase echo list width
