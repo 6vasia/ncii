@@ -177,6 +177,23 @@ sub fullscreen
     $viewwin->getobj('content')->focus;
 }
 
+sub show_message
+{
+    my ($viewwin, $area, $m) = @_;
+    my $head = $viewwin->getobj('head');
+    my $view = $viewwin->getobj('content');
+    my $ts = localtime($m->{date});
+#    my $ts = sprintf(" %02d:%02d %02d.%02d.%04d",
+#            $lt[2], $lt[1], $lt[3], $lt[4], $lt[5]+1900
+#        );
+    $head->title(sprintf ("%s: %s of %s", $area, $m->{no}, scalar @{$echoes->{$area}}));
+    $head->getobj('date')->text($ts);
+    $head->getobj('from')->text($m->{from});
+    $head->getobj('to')->text($m->{to});
+    $head->getobj('subj')->text($m->{subj});
+    $view->text($m->{content});
+}
+
 sub ui
 {
     my $echowidth = defined $cfg->{ui}{echolist_width} ? $cfg->{ui}{echolist_width} : 16;
@@ -212,6 +229,75 @@ sub ui
         -wrapping => 1,
         -y => int($msgwin->canvasheight()/2),
     );
+    my $viewwin = $cui->add (
+        'viewwin', 'Window',
+        -border => 0,
+    );
+    my $vwhead = $viewwin->add (
+        'head', 'Window',
+        -border => 1,
+        -title => 'Area %s | Message %d of %d',
+        -y => 0,
+        -height => 6
+    );
+    my $hlen = 6;
+    $vwhead->add (
+        'datel', 'Label',
+        -text => 'Date:',
+        -bold => 1,
+        -y => 0,
+        -width => $hlen,
+    );
+    $vwhead->add (
+        'date', 'Label',
+        -y => 0,
+        -x => $hlen,
+    );
+    $vwhead->add (
+        'froml', 'Label',
+        -text => 'From:',
+        -bold => 1,
+        -y => 1,
+        -width => $hlen,
+    );
+    $vwhead->add (
+        'from', 'Label',
+        -y => 1,
+        -x => $hlen,
+    );
+    $vwhead->add (
+        'tol', 'Label',
+        -text => 'To  :',
+        -bold => 1,
+        -y => 2,
+        -width => $hlen,
+    );
+    $vwhead->add (
+        'to', 'Label',
+        -y => 2,
+        -x => $hlen,
+    );
+    $vwhead->add (
+        'subjl', 'Label',
+        -text => 'Subj:',
+        -bold => 1,
+        -y => 3,
+        -width => $hlen,
+    );
+    $vwhead->add (
+        'subj', 'Label',
+        -y => 3,
+        -x => $hlen,
+    );
+    
+    my $vwbody = $viewwin->add (
+        'content', 'TextViewer',
+        -y => $vwhead->height(),
+        -text => 'test',
+        -wrapping => 1
+    );
+    $vwbody->set_routine ('loose-focus', 'RETURN');
+
     $mainwin->set_binding( sub {dump_cache; $cui->mainloopExit;} , "\cQ");
     $mainwin->set_binding( sub {
             $echowin->{-width} += 1;
@@ -245,9 +331,11 @@ sub ui
     $msglist->onSelectionChange(sub {
             $msglist->option_select;
             if ($msglist->get_active_value() and defined $messages->{$msglist->get_active_value()}){
-                $preview->text($messages->{$msglist->get_active_value()}{content});
+                my $m = $messages->{$msglist->get_active_value()};
+                $preview->text($m->{content});
                 set_read($msglist);
                 show_unread($echolist, $msglist);
+                show_message($viewwin, $echolist->get_active_value(), $m);
             }
         });
         
@@ -257,27 +345,19 @@ sub ui
             load_echo ($msglist);
         }, "\cF");
 
-    my $viewwin = $cui->add (
-        'viewwin', 'Window',
-        -border => 0,
-    );
-    my $vwhead = $viewwin->add (
-        'head', 'Window',
-        -border => 1,
-        -title => 'Area %s | Message %d of %d',
-        -y => 0,
-        -height => 7
-    );
-    $vwhead->add (
-        'date', 'Label'
-    );
-    my $vwbody = $viewwin->add (
-        'content', 'TextViewer',
-        -y => 8,
-    );
-    $vwbody->set_routine ('loose-focus', 'RETURN');
-    
     $viewwin->set_binding (sub {$mainwin->focus}, "\cQ");
+    $viewwin->set_binding (sub {
+            $msglist->option_next;
+            my $m = $messages->{$msglist->get_active_value()};
+            show_message($viewwin, $echolist->get_active_value(), $m);
+            $viewwin->draw;
+        }, KEY_RIGHT());
+    $viewwin->set_binding (sub {
+            $msglist->option_prev;
+            my $m = $messages->{$msglist->get_active_value()};
+            show_message($viewwin, $echolist->get_active_value(), $m);
+            $viewwin->draw;
+        }, KEY_LEFT());
     $msglist->set_binding (sub {fullscreen($viewwin)}, KEY_ENTER());
 
     $echolist->set_selection(0);
