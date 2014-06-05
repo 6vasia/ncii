@@ -24,6 +24,7 @@ my $messages = {};
 sub config
 {
     my $cfgpath = $HOME ? $HOME . '/.config/ncii' : '';
+    $cfgpath = './' if -e './ncii.yaml';
     $cfg = YAML::LoadFile ($cfgpath.'/ncii.yaml') if -e $cfgpath.'/ncii.yaml';
 }
 
@@ -43,64 +44,71 @@ sub msg_title ($$)
     }
 }
 
-sub load_echo ($)
+sub fetch
 {
     local $_;
-    my $list = shift;
-    my $echo = $list->title;
     my @errors = ();
-    my $strwidth = $list->canvaswidth;
-    
-    logger ("info", "Loading %s", $echo);
     
     unless (defined $ii){
         my $authstr = 'guest';
         $authstr = $cfg->{authstr} if (defined $cfg->{authstr} and $cfg->{authstr});
         $ii = II::Point->new ($cfg->{node}, $authstr);
     }
-    unless (defined $echoes->{$echo}) {
-        logger ("info", "Fetching %s", $echo);
-        $cui->status ("Loading $echo...");
-        
-        my %msgs = $ii->fetch_echoes($echo);
-        @errors = $ii->pop_errors;
-        if (scalar @errors){
-            logger ("warn", "Error fetching %s: %s", $echo, $_) for (@errors);
-            $cui->error("There were errors fetching $echo. See log for details.");
+    for my $echo (@{$cfg->{echoes}}) {
+        unless (defined $echoes->{$echo}) {
+            logger ("info", "Fetching %s", $echo);
+            $cui->status ("Loading $echo...");
+            
+            my %msgs = $ii->fetch_echoes($echo);
+            @errors = $ii->pop_errors;
+            if (scalar @errors){
+                logger ("warn", "Error fetching %s: %s", $echo, $_) for (@errors);
+                $cui->error("There were errors fetching $echo. See log for details.");
+            }
+            $echoes->{$echo} = $msgs{$echo};
+            logger ("info", "Fetched %s: %d", $echo, scalar @{$msgs{$echo}});
+            
+            $cui->nostatus;
         }
-        $echoes->{$echo} = $msgs{$echo};
-        logger ("info", "Fetched %s: %d", $echo, scalar @{$msgs{$echo}});
         
-        $cui->nostatus;
-    }
-    
-    my @fetchlist = ();
-    for my $m (@{$echoes->{$echo}}) {
-        push @fetchlist, $m unless defined $messages->{$m};
-    }
-    if (scalar @fetchlist) {
-        logger ("info", "fetching %d messages", scalar @fetchlist);
-        $cui->status ("Loading messages for $echo");
+        my @fetchlist = ();
+        for my $m (@{$echoes->{$echo}}) {
+            push @fetchlist, $m unless defined $messages->{$m};
+        }
+        if (scalar @fetchlist) {
+            logger ("info", "fetching %d messages", scalar @fetchlist);
+            $cui->status ("Loading messages for $echo");
 
-        my %fetched = $ii->fetch_msgs(@fetchlist);
-        @errors = $ii->pop_errors;
-        if (scalar @errors) {
-            logger ("warn", "Error fetching: %s", $_) for (@errors);
-            $cui->error ("Error fetching messages. See log for detail.");
+            my %fetched = $ii->fetch_msgs(@fetchlist);
+            @errors = $ii->pop_errors;
+            if (scalar @errors) {
+                logger ("warn", "Error fetching: %s", $_) for (@errors);
+                $cui->error ("Error fetching messages. See log for detail.");
+            }
+            for my $msg (keys %fetched){
+                $messages->{$msg} = $fetched{$msg};
+            }
+            $cui->nostatus;
         }
-        for my $msg (keys %fetched){
-            $messages->{$msg} = $fetched{$msg};
+        my $no = 1;
+        for my $m (@{$echoes->{$echo}}){
+            $messages->{$m}{no} = $no++;
         }
-        $cui->nostatus;
     }
-    $cui->leave_curses;
-    my $no = 1;
-    for my $m (@{$echoes->{$echo}}){
-        $messages->{$m}{no} = $no++;
-    }
+}
+
+sub load_echo ($)
+{
+    local $_;
+    my $list = shift;
+    my $echo = $list->title;
+    my $strwidth = $list->canvaswidth;
+    
+    return unless $echo and $echoes->{$echo};
+    logger ("info", "Loading %s", $echo);
     $list->values ([ reverse @{$echoes->{$echo}} ]);
     $list->labels ({ map { $_ => msg_title ($messages->{$_}, $strwidth) } @{$echoes->{$echo}} });
-    $cui->reset_curses;
+    $list->draw;
 }
 
 sub ui
@@ -145,26 +153,26 @@ sub ui
         -y => int($msgwin->canvasheight()/2),
     );
     $cui->set_binding( sub {$cui->mainloopExit;} , "\cQ");
-    $cui->set_binding( sub {
+    $mainwin->set_binding( sub {
             $echowin->{-width} += 1;
             $echowin->layout;
             $msgwin->{-x} += 1;
             $msgwin->layout;
             $mainwin->draw;
         } , "\c]");
-    $cui->set_binding( sub {
+    $mainwin->set_binding( sub {
             $echowin->{-width} -= 1;
             $echowin->layout;
             $msgwin->{-x} -= 1;
             $msgwin->layout;
             $mainwin->draw;
         } , "\c[");
-    $cui->set_binding(sub {
+    $mainwin->set_binding(sub {
             $echolist->option_next;
             $echolist->option_select;
             $echolist->draw},
         "\cN");
-    $cui->set_binding(sub {
+    $mainwin->set_binding(sub {
             $echolist->option_prev;
             $echolist->option_select;
             $echolist->draw},
@@ -177,10 +185,22 @@ sub ui
         });
     $msglist->onSelectionChange(sub {
             $msglist->option_select;
-            $preview->text($messages->{$msglist->get_active_value()}{content});
+            if ($msglist->get_active_value() and defined $messages->{$msglist->get_active_value()}){
+                $preview->text($messages->{$msglist->get_active_value()}{content});
+            }
         });
+        
+    $mainwin->set_binding(sub {
+            fetch();
+            load_echo ($msglist);
+        }, "\cF");
     $echolist->set_selection(0);
     $msgwin->focus;
+}
+
+sub options_ui
+{
+    die "Config me first!";
 }
 
 logger_facility "ncii";
@@ -188,7 +208,7 @@ logger ("info", "=== Starting at %s ===", scalar localtime);
 config;
 
 if (not defined $cfg->{node}) {
-    die "Config me first!";
+    options_ui;
 }
 
 ui;
