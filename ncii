@@ -8,6 +8,7 @@ use Curses;
 use Curses::UI;
 use YAML;
 use II::Point;
+use II::Cache::YAML;
 use II::Misc qw(logger logger_facility);
 use Env qw/HOME/;
 #use Data::Dumper;
@@ -20,12 +21,36 @@ my $cfg = {};
 my $ii;
 my $echoes = {};
 my $messages = {};
+my $cache;
 
 sub config
 {
-    my $cfgpath = $HOME ? $HOME . '/.config/ncii' : '';
-    $cfgpath = './' if -e './ncii.yaml';
+    my $cfgpath = $HOME ? $HOME . '/.config/ncii' : '.';
+    -d $cfgpath or mkdir $cfgpath or die "Couldn't mkdir $cfgpath: $!";
+    $cfgpath = '.' if -e './ncii.yaml';
     $cfg = YAML::LoadFile ($cfgpath.'/ncii.yaml') if -e $cfgpath.'/ncii.yaml';
+}
+
+sub load_cache
+{
+    my $cachepath = $HOME ? $HOME . '/.config/ncii' : '.';
+    $cui->status ("Loading cache") if defined $cui;
+    $cache = II::Cache::YAML->new ($cfg->{node}, $cachepath);
+    $echoes = $cache->echoes;
+    $messages = $cache->messages;
+    $cui->nostatus if defined $cui;
+}
+
+sub dump_cache
+{
+    logger ("info", "Dumping cache");
+    $cui->status ("Dumping cache") if defined $cui;
+    if (defined $cache){
+        $cache->echoes($echoes);
+        $cache->messages($messages);
+        $cache->dump;
+    }
+    $cui->nostatus if defined $cui;
 }
 
 sub msg_title ($$)
@@ -55,7 +80,7 @@ sub fetch
         $ii = II::Point->new ($cfg->{node}, $authstr);
     }
     for my $echo (@{$cfg->{echoes}}) {
-        unless (defined $echoes->{$echo}) {
+        {
             logger ("info", "Fetching %s", $echo);
             $cui->status ("Loading $echo...");
             
@@ -87,6 +112,7 @@ sub fetch
             }
             for my $msg (keys %fetched){
                 $messages->{$msg} = $fetched{$msg};
+                $messages->{$msg}{unread} = 1;
             }
             $cui->nostatus;
         }
@@ -111,16 +137,16 @@ sub load_echo ($)
     $list->draw;
 }
 
+sub fullscreen
+{
+    my $viewwin = shift;
+    $viewwin->focus;
+    $viewwin->getobj('content')->focus;
+}
+
 sub ui
 {
     my $echowidth = defined $cfg->{ui}{echolist_width} ? $cfg->{ui}{echolist_width} : 16;
-    $cui = new Curses::UI ( 
-        -clear_on_exit => 1, 
-        -mouse_support => 1,
-        -color_support => 1,
-        -debug => 0,
-        -utf8 => 1,
-    );
     my $mainwin = $cui->add (
         'mainwin', 'Window',
         -border => 0,
@@ -152,21 +178,21 @@ sub ui
         -wrapping => 1,
         -y => int($msgwin->canvasheight()/2),
     );
-    $cui->set_binding( sub {$cui->mainloopExit;} , "\cQ");
+    $mainwin->set_binding( sub {dump_cache; $cui->mainloopExit;} , "\cQ");
     $mainwin->set_binding( sub {
             $echowin->{-width} += 1;
             $echowin->layout;
             $msgwin->{-x} += 1;
             $msgwin->layout;
             $mainwin->draw;
-        } , "\c]");
+        } , "\cL");
     $mainwin->set_binding( sub {
             $echowin->{-width} -= 1;
             $echowin->layout;
             $msgwin->{-x} -= 1;
             $msgwin->layout;
             $mainwin->draw;
-        } , "\c[");
+        } , "\cK");
     $mainwin->set_binding(sub {
             $echolist->option_next;
             $echolist->option_select;
@@ -194,6 +220,30 @@ sub ui
             fetch();
             load_echo ($msglist);
         }, "\cF");
+
+    my $viewwin = $cui->add (
+        'viewwin', 'Window',
+        -border => 0,
+    );
+    my $vwhead = $viewwin->add (
+        'head', 'Window',
+        -border => 1,
+        -title => 'Area %s | Message %d of %d',
+        -y => 0,
+        -height => 7
+    );
+    $vwhead->add (
+        'date', 'Label'
+    );
+    my $vwbody = $viewwin->add (
+        'content', 'TextViewer',
+        -y => 8,
+    );
+    $vwbody->set_routine ('loose-focus', 'RETURN');
+    
+    $viewwin->set_binding (sub {$mainwin->focus}, "\cQ");
+    $msglist->set_binding (sub {fullscreen($viewwin)}, KEY_ENTER());
+
     $echolist->set_selection(0);
     $msgwin->focus;
 }
@@ -205,11 +255,20 @@ sub options_ui
 
 logger_facility "ncii";
 logger ("info", "=== Starting at %s ===", scalar localtime);
+
 config;
+$cui = new Curses::UI ( 
+    -clear_on_exit => 1, 
+    -mouse_support => 1,
+    -color_support => 1,
+    -debug => 0,
+    -utf8 => 1,
+);
+load_cache;
+ui;
 
 if (not defined $cfg->{node}) {
     options_ui;
 }
 
-ui;
 $cui->mainloop;
