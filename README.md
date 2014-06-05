@@ -19,7 +19,8 @@ Requires: libwww-perl, MIME::Base64, Curses::UI, YAML.
 
 ## Config
 
-is located in file $HOME/.config/ncii/ncii.yaml
+NCII looks for config file named ncii.yaml first in wokkdir, then in $HOME/.config/ncii/
+Also, first argument is treated as config file path. E.g. ncii myconfig1.yaml.
 
 YAML syntax.
 
