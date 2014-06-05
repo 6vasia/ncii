@@ -28,7 +28,8 @@ sub config
     my $cfgpath = $HOME ? $HOME . '/.config/ncii' : '.';
     -d $cfgpath or mkdir $cfgpath or die "Couldn't mkdir $cfgpath: $!";
     $cfgpath = '.' if -e './ncii.yaml';
-    $cfg = YAML::LoadFile ($cfgpath.'/ncii.yaml') if -e $cfgpath.'/ncii.yaml';
+    my $cfgfile = defined $ARGV[0] ? $ARGV[0] : $cfgpath.'/ncii.yaml';
+    $cfg = YAML::LoadFile ($cfgfile) if -e $cfgfile;
     if (defined $cfg->{node} and $cfg->{node} =~ m@\Wu/$@) {
         $cfg->{node} =~ s@u/$@@;
     }
