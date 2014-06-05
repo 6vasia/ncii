@@ -10,8 +10,10 @@ use YAML;
 use II::Point;
 use II::Misc qw(logger logger_facility);
 use Env qw/HOME/;
+#use Data::Dumper;
 
-use Data::Dumper;
+binmode STDIN, ':utf8';
+binmode STDOUT, ':utf8';
 
 my $cui;
 my $cfg = {};
