@@ -16,3 +16,12 @@ Requires: libwww-perl, MIME::Base64, Curses::UI, YAML.
 - /: search (by title or in preview)
 - Tab: switch between message list and preview
 
+## Config
+
+is located in file $HOME/.config/ncii/ncii.yaml
+
+### Example config
+
+node: http://your.node/url/
+echoes: [qwerty.14, test.14]
+
