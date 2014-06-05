@@ -11,7 +11,7 @@ use II::Point;
 use II::Cache::YAML;
 use II::Misc qw(logger logger_facility);
 use Env qw/HOME/;
-#use Data::Dumper;
+use Data::Dumper;
 
 binmode STDIN, ':utf8';
 binmode STDOUT, ':utf8';
@@ -66,10 +66,12 @@ sub msg_title ($$)
         );
     my $title = sprintf ("%4d: %s (%s -> %s)",
         $m->{no}, $m->{subj}, $m->{from}, $m->{to});
-    if (length($title) > $width - length($ts)) {
+    my $tlen = length($title);
+    $title = '<bold>'.$title.'</bold>' if $m->{unread};
+    if ($tlen > $width - length($ts)) {
         return substr ($title, 0, $width - length($ts)).$ts;
     } else {
-        return $title." "x($width - length($ts) - length($title)).$ts;
+        return $title." "x($width - length($ts) - $tlen).$ts;
     }
 }
 
@@ -141,6 +143,33 @@ sub load_echo ($)
     $list->draw;
 }
 
+sub show_unread ($$)
+{
+    my ($elist, $msglist) = @_;
+    my $labels = {};
+    for my $e (@{$elist->values()}){
+        my $unc = 0;
+        for my $m (@{$echoes->{$e}}) {
+            $unc++ if ($messages->{$m}{unread});
+        }
+        $labels->{$e} = $unc ? "$e ($unc)" : $e;
+    }
+    logger ("debug", "echolabes: %s", Dumper $labels);
+    $elist->labels ($labels);
+    $elist->draw;
+    $msglist->title ($labels->{$elist->get_active_value()});
+    $msglist->draw;
+}
+
+sub set_read ($)
+{
+    my $list = shift;
+    my $m = $list->get_active_value();
+    $messages->{$m}{unread} = 0;
+    $list->labels()->{$m} = msg_title($messages->{$m}, $list->canvaswidth());
+    $list->draw;
+}
+
 sub fullscreen
 {
     my $viewwin = shift;
@@ -175,6 +204,7 @@ sub ui
         -border => 1,
         -height => $msgwin->canvasheight()/2,
         -vscrollbar => 'right',
+        -htmltext => 1
     );
     my $preview = $msgwin->add (
         'prewiew', 'TextViewer', 
@@ -211,17 +241,19 @@ sub ui
     $echolist->onChange(sub {
             $msglist->title($echolist->get_active_value());
             load_echo($msglist);
-            $msglist->draw;
         });
     $msglist->onSelectionChange(sub {
             $msglist->option_select;
             if ($msglist->get_active_value() and defined $messages->{$msglist->get_active_value()}){
                 $preview->text($messages->{$msglist->get_active_value()}{content});
+                set_read($msglist);
+                show_unread($echolist, $msglist);
             }
         });
         
     $mainwin->set_binding(sub {
             fetch();
+            show_unread($echolist, $msglist);
             load_echo ($msglist);
         }, "\cF");
 
@@ -249,6 +281,7 @@ sub ui
     $msglist->set_binding (sub {fullscreen($viewwin)}, KEY_ENTER());
 
     $echolist->set_selection(0);
+    show_unread($echolist, $msglist);
     $msgwin->focus;
 }
 
