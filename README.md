@@ -20,8 +20,8 @@ Requires: libwww-perl, MIME::Base64, Curses::UI, YAML.
 
 is located in file $HOME/.config/ncii/ncii.yaml
 
-### Example config
+YAML syntax.
 
-node: http://your.node/url/
-echoes: [qwerty.14, test.14]
-
+Key options:
+- node: ii node URL, string
+- echoes: subscriptions, array
