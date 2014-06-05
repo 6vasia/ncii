@@ -29,6 +29,9 @@ sub config
     -d $cfgpath or mkdir $cfgpath or die "Couldn't mkdir $cfgpath: $!";
     $cfgpath = '.' if -e './ncii.yaml';
     $cfg = YAML::LoadFile ($cfgpath.'/ncii.yaml') if -e $cfgpath.'/ncii.yaml';
+    if (defined $cfg->{node} and $cfg->{node} =~ m@\Wu/$@) {
+        $cfg->{node} =~ s@u/$@@;
+    }
 }
 
 sub load_cache
