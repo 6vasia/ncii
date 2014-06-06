@@ -129,11 +129,10 @@ sub fetch
     }
 }
 
-sub load_echo ($)
+sub load_area ($$)
 {
     local $_;
-    my $list = shift;
-    my $echo = $list->title;
+    my ($list, $echo) = @_;
     my $strwidth = $list->canvaswidth;
     
     return unless $echo and $echoes->{$echo};
@@ -154,11 +153,10 @@ sub show_unread ($$)
         }
         $labels->{$e} = $unc ? "$e ($unc)" : $e;
     }
-    logger ("debug", "echolabes: %s", Dumper $labels);
     $elist->labels ($labels);
     $elist->draw;
     $msglist->title ($labels->{$elist->get_active_value()});
-    $msglist->draw;
+    $msglist->intellidraw;
 }
 
 sub set_read ($)
@@ -167,7 +165,7 @@ sub set_read ($)
     my $m = $list->get_active_value();
     $messages->{$m}{unread} = 0;
     $list->labels()->{$m} = msg_title($messages->{$m}, $list->canvaswidth());
-    $list->draw;
+    $list->intellidraw;
 }
 
 sub fullscreen
@@ -304,14 +302,16 @@ sub ui
             $echowin->layout;
             $msgwin->{-x} += 1;
             $msgwin->layout;
-            $mainwin->draw;
+            $echowin->draw;
+            $mainwin->intellidraw;
         } , "\cL");
     $mainwin->set_binding( sub {
             $echowin->{-width} -= 1;
             $echowin->layout;
             $msgwin->{-x} -= 1;
             $msgwin->layout;
-            $mainwin->draw;
+            $echowin->draw;
+            $mainwin->intellidraw;
         } , "\cK");
     $mainwin->set_binding(sub {
             $echolist->option_next;
@@ -325,16 +325,18 @@ sub ui
         "\cP");
     
     $echolist->onChange(sub {
-            $msglist->title($echolist->get_active_value());
-            load_echo($msglist);
+            show_unread($echolist, $msglist);
+            load_area($msglist, $echolist->get_active_value());
         });
     $msglist->onSelectionChange(sub {
             $msglist->option_select;
             if ($msglist->get_active_value() and defined $messages->{$msglist->get_active_value()}){
                 my $m = $messages->{$msglist->get_active_value()};
                 $preview->text($m->{content});
-                set_read($msglist);
-                show_unread($echolist, $msglist);
+                if ($m->{unread}) {
+                    set_read($msglist);
+                    show_unread($echolist, $msglist);
+                }
                 show_message($viewwin, $echolist->get_active_value(), $m);
             }
         });
@@ -342,7 +344,7 @@ sub ui
     $mainwin->set_binding(sub {
             fetch();
             show_unread($echolist, $msglist);
-            load_echo ($msglist);
+            load_area ($msglist, $echolist->get_active_value());
         }, "\cF");
 
     $viewwin->set_binding (sub {$mainwin->focus}, "\cQ");
@@ -350,13 +352,13 @@ sub ui
             $msglist->option_next;
             my $m = $messages->{$msglist->get_active_value()};
             show_message($viewwin, $echolist->get_active_value(), $m);
-            $viewwin->draw;
+            $viewwin->intellidraw;
         }, KEY_RIGHT());
     $viewwin->set_binding (sub {
             $msglist->option_prev;
             my $m = $messages->{$msglist->get_active_value()};
             show_message($viewwin, $echolist->get_active_value(), $m);
-            $viewwin->draw;
+            $viewwin->intellidraw;
         }, KEY_LEFT());
     $msglist->set_binding (sub {fullscreen($viewwin)}, KEY_ENTER());
 
