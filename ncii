@@ -8,6 +8,7 @@ use Curses;
 use Curses::UI;
 use YAML;
 use II::Point;
+use II::Cache::Storable;
 use II::Cache::YAML;
 use II::Misc qw(logger logger_facility);
 use Env qw/HOME/;
@@ -21,7 +22,6 @@ my $cfg = {};
 my $ii;
 my $echoes = {};
 my $messages = {};
-my $cache;
 
 sub config
 {
@@ -39,7 +39,7 @@ sub load_cache
 {
     my $cachepath = $HOME ? $HOME . '/.config/ncii' : '.';
     $cui->status ("Loading cache") if defined $cui;
-    $cache = II::Cache::YAML->new ($cfg->{node}, $cachepath);
+    my $cache = II::Cache::Storable->new ($cfg->{node}, $cachepath);
     $echoes = $cache->echoes;
     $messages = $cache->messages;
     $cui->nostatus if defined $cui;
@@ -47,8 +47,10 @@ sub load_cache
 
 sub dump_cache
 {
+    my $cachepath = $HOME ? $HOME . '/.config/ncii' : '.';
     logger ("info", "Dumping cache");
     $cui->status ("Dumping cache") if defined $cui;
+    my $cache = II::Cache::Storable->new ($cfg->{node}, $cachepath);
     if (defined $cache){
         $cache->echoes($echoes);
         $cache->messages($messages);
