@@ -1,7 +1,6 @@
 #!/usr/bin/env perl
 
 use strict;
-use warnings;
 use utf8;
 
 use Curses;
@@ -17,6 +16,7 @@ use Data::Dumper;
 
 binmode STDIN, ':utf8';
 binmode STDOUT, ':utf8';
+use open ':encoding(utf8)';
 
 my $cui;
 my $cfg = {};
@@ -88,6 +88,22 @@ sub fetch
         $authstr = $cfg->{authstr} if (defined $cfg->{authstr} and $cfg->{authstr});
         $ii = II::Point->new ($cfg->{node}, $authstr);
     }
+    if (defined $messages->{unsent}) {
+        $cui->status ("Pushing messages...");
+        my $index = 0;
+        for my $m (@{$messages->{unsent}}){
+            $ii->post($m);
+            @errors = $ii->pop_errors;
+            if (@errors) {
+                logger ("warn", "Error pushing: %s", $_) for (@errors);
+                $cui->error ("Error pushing messages. See log for detail.");
+            } else {
+                splice @{$messages->{unsent}}, $index;
+            }
+            $index++;
+        }
+        $cui->nostatus;
+    }
     for my $echo (@{$cfg->{echoes}}) {
         {
             logger ("info", "Fetching %s", $echo);
@@ -95,7 +111,7 @@ sub fetch
             
             my %msgs = $ii->fetch_echoes($echo);
             @errors = $ii->pop_errors;
-            if (scalar @errors){
+            if (@errors){
                 logger ("warn", "Error fetching %s: %s", $echo, $_) for (@errors);
                 $cui->error("There were errors fetching $echo. See log for details.");
             }
@@ -109,13 +125,13 @@ sub fetch
         for my $m (@{$echoes->{$echo}}) {
             push @fetchlist, $m unless defined $messages->{$m};
         }
-        if (scalar @fetchlist) {
+        if (@fetchlist) {
             logger ("info", "fetching %d messages", scalar @fetchlist);
             $cui->status ("Loading messages for $echo");
 
             my %fetched = $ii->fetch_msgs(@fetchlist);
             @errors = $ii->pop_errors;
-            if (scalar @errors) {
+            if (@errors) {
                 logger ("warn", "Error fetching: %s", $_) for (@errors);
                 $cui->error ("Error fetching messages. See log for detail.");
             }
@@ -198,9 +214,9 @@ sub show_message
 sub resubj ($)
 {
     local $_ = shift;
-    if (m/^re\s?\((\d+)\):/i) {
-        my $ct = $1 ?  $1 + 1 : 2;
-        s/^(re)/$1 \($ct\)/i;
+    if (m/^re\s?(\((\d+)\))?:/i) {
+        my $ct = $2 ?  $2 + 1 : 2;
+        s/^(re)\s?(\((\d+)\))?:/$1 \($ct\):/i;
     } else {
         $_ = 'Re: '.$_;
     }
@@ -210,8 +226,8 @@ sub resubj ($)
 sub quote ($)
 {
     local $_ = shift;
-    s/^/>/g;
-    return $_;
+    s/\n(.)/\n>$1/g;
+    return '>'.$_;
 }
 
 sub abandon_mesg
@@ -222,8 +238,21 @@ sub abandon_mesg
 
 sub send_mesg
 {
+    my ($area, $repto) = @_;
+    my $newwin = $cui->getobj('new_mesg');
+    my $m = {
+        echoarea => $area,
+        to => $newwin->getobj('to')->text(),
+        subj => $newwin->getobj('subj')->text(),
+        content => $newwin->getobj('content')->text(),
+        repto => $repto
+    };
+    $m->{content}.="\n" unless ($m->{content} =~ /\n$/);
+    $messages->{unsent} = [] unless defined $messages->{unsent};
+    push @{$messages->{unsent}}, $m;
     $cui->delete ('new_mesg');
     $cui->draw;
+    $cui->dialog ("Message is held and will be pushed upon next fetch");
 }
 
 sub new_mesg
@@ -307,12 +336,12 @@ sub new_mesg
                 -label => '< Send >',
                 -value => 'send',
                 -shortcut => "\cS",
-                -onpress => \&send_mesg
+                -onpress => sub {send_mesg($area, $repto)}
             },
         ]
     );
     $newwin->set_binding (\&abandon_mesg, "\cQ");
-    $newwin->set_binding (\&send_mesg, "\cS");
+    $newwin->set_binding (sub {send_mesg($area, $repto)}, "\cS");
     
     $newwin->focus;
 }
@@ -515,7 +544,7 @@ $cui = new Curses::UI (
     -mouse_support => 1,
     -color_support => 1,
     -debug => 0,
-    -utf8 => 1,
+    -utf8 => 1
 );
 
 if (not defined $cfg->{node}) {
