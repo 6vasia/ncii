@@ -27,3 +27,7 @@ YAML syntax.
 Key options:
 - node: ii node URL, string
 - echoes: subscriptions, array
+
+# License
+
+This project is licensed under the terms of BSD license. See LICENSE for details.
