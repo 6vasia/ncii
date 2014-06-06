@@ -11,7 +11,8 @@ use II::Point;
 use II::Cache::Storable;
 use II::Cache::YAML;
 use II::Misc qw(logger logger_facility);
-use Env qw/HOME/;
+use Env qw/HOME EDITOR/;
+use File::Temp qw(tempfile);
 use Data::Dumper;
 
 binmode STDIN, ':utf8';
@@ -194,9 +195,131 @@ sub show_message
     $view->text($m->{content});
 }
 
+sub resubj ($)
+{
+    local $_ = shift;
+    if (m/^re\s?\((\d+)\):/i) {
+        my $ct = $1 ?  $1 + 1 : 2;
+        s/^(re)/$1 \($ct\)/i;
+    } else {
+        $_ = 'Re: '.$_;
+    }
+    return $_;
+}
+
+sub quote ($)
+{
+    local $_ = shift;
+    s/^/>/g;
+    return $_;
+}
+
+sub abandon_mesg
+{
+    $cui->delete ('new_mesg');
+    $cui->draw;
+}
+
+sub send_mesg
+{
+    $cui->delete ('new_mesg');
+    $cui->draw;
+}
+
+sub new_mesg
+{
+    my ($area, $repto) = @_;
+    my $newwin = $cui->add (
+        'new_mesg', 'Window',
+        -border => 1,
+        -title => "Write to $area",
+        -centered => 1,
+        -width => int($cui->{-width}*3/4),
+        -height => int($cui->{-height}*3/4),
+    );
+    $newwin->add (
+        'tol', 'Label',
+        -y => 0, -widht => 5,
+        -text => 'To:  ',
+        -bold => 1
+    );
+    $newwin->add (
+        'to', 'TextEntry',
+        -y => 0, -x => 6,
+        -sbborder => 1,
+        -text => defined $repto ? $messages->{$repto}{from} : 'All'
+    );
+    $newwin->add (
+        'subjl', 'Label',
+        -y => 1, -widht => 5,
+        -text => 'Subj:',
+        -bold => 1
+    );
+    $newwin->add (
+        'subj', 'TextEntry',
+        -y => 1, -x => 6,
+        -sbborder => 1,
+        -text => defined $repto ? resubj ($messages->{$repto}{subj}) : ''
+    );
+    my $preview = $newwin->add (
+        'content', 'TextViewer',
+        -y => 2, -height => $newwin->canvasheight() - 3,
+        -border => 1,
+        -text => defined $repto ? quote($messages->{$repto}{content}) : '',
+        -wrapping => 1,
+        -vscrollbar => 'right',
+    );
+    $preview->set_binding (sub {
+            my ($th, $tempfile) = tempfile( );
+            unless ($th) {
+                $cui->error ("Failed opening file: $!");
+                return;
+            }
+            my $ed = $cfg->{editor};
+            $ed = $EDITOR unless defined $ed;
+            if (defined $ed){
+                print $th $preview->text();
+                close $th;
+                $cui->leave_curses;
+                system ("$ed $tempfile");
+                $cui->reset_curses;
+                local $/=undef;
+                open $th, "<", $tempfile;
+                $preview->text(<$th>);
+                close $th;
+                $preview->draw;
+            } else {
+                $cui->error ("Editor not defined. Use config or EDITOR variable");
+            }
+        }, KEY_ENTER()
+    );
+    $newwin->add (
+        'buttons', 'Buttonbox',
+        -y => -1,
+        -buttons => [
+            {
+                -label => '< Abandon >',
+                -value => 'fuck',
+                -shortcut => "\cQ",
+                -onpress => \&abandon_mesg
+            },
+            {
+                -label => '< Send >',
+                -value => 'send',
+                -shortcut => "\cS",
+                -onpress => \&send_mesg
+            },
+        ]
+    );
+    $newwin->set_binding (\&abandon_mesg, "\cQ");
+    $newwin->set_binding (\&send_mesg, "\cS");
+    
+    $newwin->focus;
+}
+
 sub ui
 {
-    my $echowidth = defined $cfg->{ui}{echolist_width} ? $cfg->{ui}{echolist_width} : 16;
+    my $echowidth = defined $cfg->{ui}{echolist_width} ? $cfg->{ui}{echolist_width} : 20;
     my $mainwin = $cui->add (
         'mainwin', 'Window',
         -border => 0,
@@ -228,6 +351,7 @@ sub ui
         -border => 1,
         -wrapping => 1,
         -y => int($msgwin->canvasheight()/2),
+        -vscrollbar => 'right',
     );
     my $viewwin = $cui->add (
         'viewwin', 'Window',
@@ -294,7 +418,9 @@ sub ui
         'content', 'TextViewer',
         -y => $vwhead->height(),
         -text => 'test',
-        -wrapping => 1
+        -wrapping => 1,
+        -border => 1,
+        -vscrollbar => 'right',
     );
     $vwbody->set_routine ('loose-focus', 'RETURN');
 
@@ -348,6 +474,11 @@ sub ui
             show_unread($echolist, $msglist);
             load_area ($msglist, $echolist->get_active_value());
         }, "\cF");
+    $mainwin->set_binding (sub {new_mesg($echolist->get_active_value())}, "n");
+    $mainwin->set_binding (sub {
+            new_mesg( $echolist->get_active_value(),
+                    $msglist->get_active_value());
+        }, "r");
 
     $viewwin->set_binding (sub {$mainwin->focus}, "\cQ");
     $viewwin->set_binding (sub {
@@ -371,7 +502,8 @@ sub ui
 
 sub options_ui
 {
-    die "Config me first!";
+    $cui->error("Config me first!");
+    exit;
 }
 
 logger_facility "ncii";
@@ -385,11 +517,12 @@ $cui = new Curses::UI (
     -debug => 0,
     -utf8 => 1,
 );
-load_cache;
-ui;
 
 if (not defined $cfg->{node}) {
     options_ui;
 }
+
+load_cache;
+ui;
 
 $cui->mainloop;
