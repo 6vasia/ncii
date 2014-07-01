@@ -69,9 +69,9 @@ sub fetch_msgs
                             tags => {split "/", $msgcontent[0]},
                             echoarea => $msgcontent[1],
                             date => $msgcontent[2],
-                            from => $msgcontent[3],
-                            addr => $msgcontent[4],
-                            to => $msgcontent[5],
+                            from => decode_utf8($msgcontent[3]),
+                            addr => decode_utf8($msgcontent[4]),
+                            to => decode_utf8($msgcontent[5]),
                             subj => decode_utf8($msgcontent[6]),
                             content => decode_utf8(join ("\n", @msgcontent[8..@msgcontent]))
                         });

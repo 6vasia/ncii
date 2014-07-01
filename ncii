@@ -13,6 +13,7 @@ use II::Misc qw(logger logger_facility);
 use Env qw/HOME EDITOR/;
 use File::Temp qw(tempfile);
 use Data::Dumper;
+use Encode;
 
 binmode STDIN, ':utf8';
 binmode STDOUT, ':utf8';
@@ -205,7 +206,7 @@ sub show_message
 #        );
     $head->title(sprintf ("%s: %s of %s", $area, $m->{no}, scalar @{$echoes->{$area}}));
     $head->getobj('date')->text($ts);
-    $head->getobj('from')->text($m->{from});
+    $head->getobj('from')->text($m->{from} . " ($m->{addr})");
     $head->getobj('to')->text($m->{to});
     $head->getobj('subj')->text($m->{subj});
     $view->text($m->{content});
@@ -243,8 +244,8 @@ sub send_mesg
     my $m = {
         echoarea => $area,
         to => $newwin->getobj('to')->text(),
-        subj => $newwin->getobj('subj')->text(),
-        content => $newwin->getobj('content')->text(),
+        subj => decode_utf8($newwin->getobj('subj')->text()),
+        content => decode_utf8($newwin->getobj('content')->text()),
         repto => $repto
     };
     $m->{content}.="\n" unless ($m->{content} =~ /\n$/);
@@ -371,7 +372,7 @@ sub ui
     my $msglist = $msgwin->add (
         'msglist', 'Listbox',
         -border => 1,
-        -height => $msgwin->canvasheight()/2,
+        -height => int($msgwin->canvasheight()/2),
         -vscrollbar => 'right',
         -htmltext => 1
     );
