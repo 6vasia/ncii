@@ -64,19 +64,29 @@ sub dump_cache
 sub msg_title ($$)
 {
     my ($m, $width) = @_;
-    my @lt = localtime($m->{date});
-    my $ts = sprintf(" %02d:%02d %02d.%02d.%04d",
-            $lt[2], $lt[1], $lt[3], $lt[4]+1, $lt[5]+1900
-        );
-    my $title = sprintf ("%4d: %s (%s -> %s)",
-        $m->{no}, $m->{subj}, $m->{from}, $m->{to});
-    my $tlen = length($title);
-    if ($tlen > $width - length($ts)) {
-        $title = substr ($title, 0, $width - length($ts)).$ts;
+    my $title;
+    if ($m->{date}) {
+        my @lt = localtime($m->{date});
+        my $ts = sprintf(" %02d:%02d %02d.%02d.%04d",
+                $lt[2], $lt[1], $lt[3], $lt[4]+1, $lt[5]+1900
+            );
+        $title = sprintf ("%4d: %s (%s -> %s)",
+            $m->{no}, $m->{subj}, $m->{from}, $m->{to});
+        my $tlen = length($title);
+        if ($tlen > $width - length($ts)) {
+            $title = substr ($title, 0, $width - length($ts)).$ts;
+        } else {
+            $title = $title." "x($width - length($ts) - $tlen).$ts;
+        }
+        $title = '<bold>'.$title.'</bold>' if $m->{unread};
     } else {
-        $title = $title." "x($width - length($ts) - $tlen).$ts;
+        $title = sprintf ("%s:%s: %s",
+            $m->{echoarea}, $m->{to}, $m->{subj});
+        my $tlen = length($title);
+        if ($tlen > $width) {
+            $title = substr ($title, 0, $width);
+        }
     }
-    $title = '<bold>'.$title.'</bold>' if $m->{unread};
     return $title;
 }
 
@@ -353,6 +363,62 @@ sub new_mesg
     $newwin->modalfocus;
 }
 
+sub unsent
+{
+    my $uwin = $cui->add (
+        'unsent', 'Window',
+        -border => 1,
+        -title => "Unsent messages",
+        -centered => 1,
+        -width => int($cui->{-width}*3/4),
+        -height => int($cui->{-height}*3/4),
+    );
+    
+    my $msglist = $uwin->add (
+        'msglist', 'Listbox',
+        -border => 1,
+        -height => int($uwin->canvasheight()/2),
+        -vscrollbar => 'right',
+        -htmltext => 1
+    );
+    my $preview = $uwin->add (
+        'prewiew', 'TextViewer', 
+        -border => 1,
+        -wrapping => 1,
+        -y => int($uwin->canvasheight()/2),
+        -vscrollbar => 'right',
+    );
+    $msglist->onSelectionChange(sub {
+            $msglist->option_select;
+            if (defined $msglist->get_active_value()){
+                my $m = $messages->{unsent}[$msglist->get_active_value()];
+                $preview->text(defined $m->{content} ? $m->{content} : "");
+            }
+        });
+    
+    $uwin->set_binding (sub {
+            if (defined $msglist->get_active_value()) {
+                if ($cui->dialog (
+                    -message => 'Delete this message?',
+                    -title => 'Confirm',
+                    -buttons => ['no', 'yes'],
+                    -values => [0, 1],
+                )) {
+                    splice @{$messages->{unsent}}, $msglist->get_active_value(), 1;
+                    $msglist->values([0..@{$messages->{unsent}}-1]);
+                    $msglist->labels({ map {$_ => msg_title($messages->{unsent}[$_], $msglist->canvaswidth)} (0..@{$messages->{unsent}}-1) });
+                    $msglist->draw;
+                }
+            }
+        }, KEY_DC());
+    $uwin->set_binding (sub {shift->loose_focus; $cui->delete('unsent'); $cui->draw}, "\cQ");
+    
+    $msglist->values([0..@{$messages->{unsent}}-1]);
+    $msglist->labels({ map {$_ => msg_title($messages->{unsent}[$_], $msglist->canvaswidth)} (0..@{$messages->{unsent}}-1) });
+
+    $uwin->modalfocus;
+}
+
 sub ui
 {
     my $echowidth = defined $cfg->{ui}{echolist_width} ? $cfg->{ui}{echolist_width} : 20;
@@ -496,7 +562,7 @@ sub ui
             $msglist->option_select;
             if ($msglist->get_active_value() and defined $messages->{$msglist->get_active_value()}){
                 my $m = $messages->{$msglist->get_active_value()};
-                $preview->text($m->{content});
+                $preview->text(defined $m->{content} ? $m->{content} : "");
                 if ($m->{unread}) {
                     set_read($msglist);
                     show_unread($echolist, $msglist);
@@ -515,6 +581,8 @@ sub ui
             new_mesg( $echolist->get_active_value(),
                     $msglist->get_active_value());
         }, "r");
+
+    $mainwin->set_binding (sub {unsent()}, "\cU");
 
     $viewwin->set_binding (sub {$mainwin->focus}, "\cQ");
     $viewwin->set_binding (sub {
