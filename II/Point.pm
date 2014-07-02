@@ -99,7 +99,6 @@ sub post
                 $msg->{repto} ? "\@repto:$msg->{repto}\n".$msg->{content} : $msg->{content}
             )
         ));
-        logger ("debug", "pushing %s as `%s'", Dumper ($msg), decode_base64($rawmsg));
         my $resp = $ua->request(POST ($self->{nodeurl}.'u/point', [tmsg => $rawmsg, pauth => $self->{authstr}]));
         unless ($resp->is_success) {
             push @{$self->{errors}}, $resp->status_line;

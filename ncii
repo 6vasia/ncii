@@ -71,18 +71,20 @@ sub msg_title ($$)
     my $title = sprintf ("%4d: %s (%s -> %s)",
         $m->{no}, $m->{subj}, $m->{from}, $m->{to});
     my $tlen = length($title);
-    $title = '<bold>'.$title.'</bold>' if $m->{unread};
     if ($tlen > $width - length($ts)) {
-        return substr ($title, 0, $width - length($ts)).$ts;
+        $title = substr ($title, 0, $width - length($ts)).$ts;
     } else {
-        return $title." "x($width - length($ts) - $tlen).$ts;
+        $title = $title." "x($width - length($ts) - $tlen).$ts;
     }
+    $title = '<bold>'.$title.'</bold>' if $m->{unread};
+    return $title;
 }
 
 sub fetch
 {
     local $_;
     my @errors = ();
+    my @sent = ();
     
     unless (defined $ii){
         my $authstr = 'guest';
@@ -99,10 +101,11 @@ sub fetch
                 logger ("warn", "Error pushing: %s", $_) for (@errors);
                 $cui->error ("Error pushing messages. See log for detail.");
             } else {
-                splice @{$messages->{unsent}}, $index;
+                push @sent, $index;
             }
             $index++;
         }
+        splice @{$messages->{unsent}}, $_, 1 for (@sent);
         $cui->nostatus;
     }
     for my $echo (@{$cfg->{echoes}}) {
@@ -249,6 +252,7 @@ sub send_mesg
         repto => $repto
     };
     $m->{content}.="\n" unless ($m->{content} =~ /\n$/);
+    logger "DEBUG", "Unsent: %s", Dumper $messages->{unsent};
     $messages->{unsent} = [] unless defined $messages->{unsent};
     push @{$messages->{unsent}}, $m;
     $cui->delete ('new_mesg');
@@ -292,7 +296,7 @@ sub new_mesg
         -text => defined $repto ? resubj ($messages->{$repto}{subj}) : ''
     );
     my $preview = $newwin->add (
-        'content', 'TextViewer',
+        'content', 'TextEditor',
         -y => 2, -height => $newwin->canvasheight() - 3,
         -border => 1,
         -text => defined $repto ? quote($messages->{$repto}{content}) : '',
@@ -321,7 +325,7 @@ sub new_mesg
             } else {
                 $cui->error ("Editor not defined. Use config or EDITOR variable");
             }
-        }, KEY_ENTER()
+        }, "\cE"
     );
     $newwin->add (
         'buttons', 'Buttonbox',
