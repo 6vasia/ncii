@@ -527,6 +527,11 @@ sub ui
             show_message($viewwin, $echolist->get_active_value(), $m);
             $viewwin->intellidraw;
         }, KEY_LEFT());
+    $viewwin->set_binding (sub {
+            new_mesg( $echolist->get_active_value(),
+                    $msglist->get_active_value(), 1);
+        }, "r");
+
     $msglist->set_binding (sub {fullscreen($viewwin)}, KEY_ENTER());
 
     $echolist->set_selection(0);
