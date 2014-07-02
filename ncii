@@ -236,6 +236,7 @@ sub quote ($)
 
 sub abandon_mesg
 {
+    $cui->getobj('new_mesg')->loose_focus;
     $cui->delete ('new_mesg');
     $cui->draw;
 }
@@ -255,6 +256,7 @@ sub send_mesg
     logger "DEBUG", "Unsent: %s", Dumper $messages->{unsent};
     $messages->{unsent} = [] unless defined $messages->{unsent};
     push @{$messages->{unsent}}, $m;
+    $cui->getobj('new_mesg')->loose_focus;
     $cui->delete ('new_mesg');
     $cui->draw;
     $cui->dialog ("Message is held and will be pushed upon next fetch");
@@ -348,7 +350,7 @@ sub new_mesg
     $newwin->set_binding (\&abandon_mesg, "\cQ");
     $newwin->set_binding (sub {send_mesg($area, $repto)}, "\cS");
     
-    $newwin->focus;
+    $newwin->modalfocus;
 }
 
 sub ui
