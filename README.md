@@ -21,6 +21,8 @@ Requires: libwww-perl, MIME::Base64, Curses::UI, YAML.
 - C-e: external editor (when composing message)
 - C-s: queue message (when composing message)
 - C-q: cancel message (when composing message)
+- C-u: show unsent messages queue
+- C-c: drop selected message (in unsent view)
 
 ## Config
 

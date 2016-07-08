@@ -254,16 +254,23 @@ sub abandon_mesg
 sub send_mesg
 {
     my ($area, $repto) = @_;
+    logger "DEBUG", "send_mesg";
     my $newwin = $cui->getobj('new_mesg');
+
+#    logger "DEBUG", "echo: %s", $area;
+ #   logger "DEBUG", "to: %s", $newwin->getobj('to')->text();
+  #  logger "DEBUG", "subj: %s", Dumper($newwin->getobj('subj')->text());
+   # logger "DEBUG", "content: %s", Dumper($newwin->getobj('content')->text());
+    #logger "DEBUG", "repto: %s", $repto;
+
     my $m = {
         echoarea => $area,
         to => $newwin->getobj('to')->text(),
-        subj => decode_utf8($newwin->getobj('subj')->text()),
-        content => decode_utf8($newwin->getobj('content')->text()),
+        subj => ($newwin->getobj('subj')->text()),
+        content => ($newwin->getobj('content')->text()),
         repto => $repto
     };
     $m->{content}.="\n" unless ($m->{content} =~ /\n$/);
-    logger "DEBUG", "Unsent: %s", Dumper $messages->{unsent};
     $messages->{unsent} = [] unless defined $messages->{unsent};
     push @{$messages->{unsent}}, $m;
     $cui->getobj('new_mesg')->loose_focus;
@@ -365,6 +372,7 @@ sub new_mesg
 
 sub unsent
 {
+    logger "DEBUG", "show unsent: %s", Dumper $messages->{unsent};
     my $uwin = $cui->add (
         'unsent', 'Window',
         -border => 1,
@@ -410,12 +418,13 @@ sub unsent
                     $msglist->draw;
                 }
             }
-        }, KEY_DC());
+        }, "\cC");
     $uwin->set_binding (sub {shift->loose_focus; $cui->delete('unsent'); $cui->draw}, "\cQ");
     
-    $msglist->values([0..@{$messages->{unsent}}-1]);
-    $msglist->labels({ map {$_ => msg_title($messages->{unsent}[$_], $msglist->canvaswidth)} (0..@{$messages->{unsent}}-1) });
-
+    if (defined $messages->{unsent}) {
+        $msglist->values([0..@{$messages->{unsent}}-1]);
+        $msglist->labels({ map {$_ => msg_title($messages->{unsent}[$_], $msglist->canvaswidth)} (0..@{$messages->{unsent}}-1) });
+    }
     $uwin->modalfocus;
 }
 
