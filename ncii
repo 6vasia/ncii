@@ -240,8 +240,21 @@ sub resubj ($)
 sub quote ($)
 {
     local $_ = shift;
-    s/\n(.)/\n>$1/g;
-    return '>'.$_;
+    my @lines = split "\n", $_;
+    
+    @lines = map {
+        if (m/^(\w*)>(\s)?/) {
+            if ($2) { 
+                s/^(\w*)>(?=\s)/\1>>/;
+            } else {
+                s/^(\w*)>(?=\S)/\1>> /;
+            }
+        } else {
+            s/^(?=\s*\S)/> /;
+        }
+        $_;
+    } @lines;
+    return join "\n", @lines;
 }
 
 sub abandon_mesg
