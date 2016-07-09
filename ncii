@@ -237,20 +237,23 @@ sub resubj ($)
     return $_;
 }
 
-sub quote ($)
+sub quote ($$)
 {
-    local $_ = shift;
-    my @lines = split "\n", $_;
+    local $_;
+    my @lines = split "\n", shift;
+    my $from = shift;
+    
+    $from =~ s/^(\w)\w*\s(\w)\w*$/\1\2/;
     
     @lines = map {
-        if (m/^(\w*)>(\s)?/) {
+        if (m/^(\w*)>+(\s)?/) {
             if ($2) { 
-                s/^(\w*)>(?=\s)/\1>>/;
+                s/^(\w*)(>+)(?=\s)/\1\2>/;
             } else {
-                s/^(\w*)>(?=\S)/\1>> /;
+                s/^(\w*)(>+)(?=\S)/\1\2> /;
             }
         } else {
-            s/^(?=\s*\S)/> /;
+            s/^(?=\s*\S)/$from> /;
         }
         $_;
     } @lines;
@@ -331,7 +334,7 @@ sub new_mesg
         'content', 'TextEditor',
         -y => 2, -height => $newwin->canvasheight() - 3,
         -border => 1,
-        -text => defined $repto ? quote($messages->{$repto}{content}) : '',
+        -text => defined $repto ? quote($messages->{$repto}{content}, $messages->{$repto}{from}) : '',
         -wrapping => 1,
         -vscrollbar => 'right',
     );
